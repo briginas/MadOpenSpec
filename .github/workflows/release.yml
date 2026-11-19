@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.18.0'
+          cache: npm
+      - name: Check the stable version tag
+        run: |
+          version=$(node -p "require('./package.json').version")
+          [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          test "$GITHUB_REF_NAME" = "v$version"
+      - run: npm ci
+      - name: Pack and install the release archive
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          npm pack --pack-destination "$RUNNER_TEMP"
+          mkdir "$RUNNER_TEMP/consumer"
+          cd "$RUNNER_TEMP/consumer"
+          npm install --prefix . "$RUNNER_TEMP/mad-openspec-$version.tgz"
+          test "$(node_modules/.bin/mad-openspec --version)" = "$version"
+          node_modules/.bin/mad-openspec setup --dry-run --json | jq -e '.toolchain == "planned"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/mad-openspec-*.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    if: github.ref_name != vars.NPM_BOOTSTRAP_TAG
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/release
+      - name: Publish the checked tarball
+        run: npm publish "$RUNNER_TEMP/release/mad-openspec-${GITHUB_REF_NAME#v}.tgz" --access public --registry=https://registry.npmjs.org
+
+  release:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes

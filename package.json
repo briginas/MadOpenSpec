@@ -3,7 +3,12 @@
   "version": "0.3.7",
   "description": "Prepare and close BMAD stories through OpenSpec",
   "type": "module",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/briginas/MadOpenSpec.git"
+  },
+  "homepage": "https://github.com/briginas/MadOpenSpec#readme",
+  "bugs": "https://github.com/briginas/MadOpenSpec/issues",
   "license": "MIT",
   "bin": {
     "mad-openspec": "dist/bin/mad-openspec.js"

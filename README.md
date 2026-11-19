@@ -51,19 +51,18 @@ flowchart TD
 
 The CLI requires Node.js 22.18.0 or later and npm. BMAD workflows use `uv`. Automatic backlog discovery also needs Python 3.11 or later. Setup installs the supported versions of BMAD (6.12.4) and OpenSpec (1.16.0) and places project skills under `.agents/skills/`.
 
-In a terminal, replace the paths below with your checkout and target project. The alias runs the CLI from source for this shell session.
+Install the CLI from npm, then run setup from your target project.
 
 ```sh
-cd /absolute/path/to/MadOpenSpec
-npm ci
-alias mad-openspec='node "/absolute/path/to/MadOpenSpec/bin/mad-openspec.ts"'
+npm install -g mad-openspec
+mad-openspec --version
 
 cd /absolute/path/to/target-project
 mad-openspec setup --dry-run --document-output-language English
 mad-openspec setup --document-output-language English
 ```
 
-This sets up a new project with English documents and Russian BMAD conversations. If your agent's shell cannot resolve the alias, give it the full path to `bin/mad-openspec.ts` to run with Node.js. For a project already using an earlier version, follow [Updating a project](docs/usage.md#update-madopenspec-in-an-existing-project).
+This sets up a new project with English documents and Russian BMAD conversations. For a project already using an earlier version, follow [Updating a project](docs/usage.md#update-madopenspec-in-an-existing-project).
 
 ## Connect the backlog
 
@@ -107,6 +106,12 @@ npm run test:smoke
 ```
 
 The smoke suite exercises the source and packaged CLI in temporary projects. Use `npm run build` to build the CLI separately.
+
+## Publish a release
+
+Update the version in the package manifest and lockfile, commit the change, then push the commit and its matching stable version tag (for example, `v0.3.8`). GitHub Actions runs CI, installs the release tarball in a clean directory, publishes that tarball to npm, and creates a GitHub Release. The npm trusted publisher is `briginas/MadOpenSpec`, workflow `release.yml`, with direct publishing enabled.
+
+For the first publication only, set the repository variable `NPM_BOOTSTRAP_TAG` to the first tag before pushing it. Download the successful run's `npm-package` artifact and publish the tarball with `npm publish <tarball> --access public`. Verify installation from npm, create the GitHub Release for the same tag, configure the trusted publisher on npm, and remove the variable.
 
 ## License
 
