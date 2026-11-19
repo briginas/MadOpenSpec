@@ -1,0 +1,4 @@
+{
+  "core": {"output_folder": "personal"},
+  "modules": {"bmm": {"planning_artifacts": "{project-root}/planning", "implementation_artifacts": "{project-root}/planning"}}
+}

@@ -1,0 +1,11 @@
+node_modules/
+*.tgz
+.mad-openspec/write.lock
+.mad-openspec/*.tmp-*
+dist/
+.DS_Store
+.env
+.env.*
+!.env.example
+/.superpowers/
+npm-debug.log*

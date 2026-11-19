@@ -1,0 +1,25 @@
+---
+name: mad-openspec-prepare
+description: Use when a user selects a BMAD story for preparation as an OpenSpec change in a MadOpenSpec project.
+---
+
+# Prepare a selected story
+
+Prepare one linked change for user approval. The agent interprets the story and refines the plan. The CLI validates the input and creates the files. Implementation starts after approval.
+
+Use the installed `mad-openspec` CLI. For a local npm installation, use `npx --no-install mad-openspec`. For an explicitly supplied binary, use `node <path-to-bin>`. Ask before installing tools. Consult `--help`, `docs/usage.md` and `schemas/change-input.schema.json` in the installed package or specified checkout for command and JSON details.
+
+1. **Connect the selected project.** Confirm the user's story ID (`N.M`) and read `.mad-openspec/config.json`. If the project is not connected, run `mad-openspec connect` to find the epics and sprint status using BMAD configuration. If the documents are missing, prepare them in BMAD first. For `BACKLOG_AMBIGUOUS`, show the candidates and use the user's choice for `--epics` or `--sprint-status`. Supplying all required paths explicitly bypasses the resolver and its Python 3.11+ dependency. Use the flags for a nonstandard manifest or root. The `--openspec-root` directory contains `openspec/` and is usually `.`. Connect assumes the tools are installed. The former `init` command is unsupported. Supported versions are BMAD v6.12.4 and OpenSpec 1.16.0 with the local `spec-driven` schema.
+2. **Read the source material.** Read the full story in the configured backlog, the related BMAD requirements, PRD and architecture, the current main specs and relevant active changes. Identify capabilities and requirement operations. Resolve conflicting requirements or unclear acceptance criteria with the user before generation. Derive requirements from the source material. The JSON example illustrates the format.
+3. **Inspect dependencies.** Run `mad-openspec dependencies extract --json`. Read `extractionState`, `dependsOn` and diagnostics for the selected story and its prerequisites. Use the CLI's deterministic reading of the backlog. Story order, incidental mentions, LLM interpretations and hand-written graphs cannot establish dependencies. For `unknown`, show the story ID, field and line, and ask what the field should mean. For example, `**Dependencies:** none` explicitly declares independence, and `**Dependencies:** Story 1.1` declares a prerequisite. A chat reply alone cannot fix the field. Edit the BMAD source only at the user's explicit request, through the BMAD workflow, then rerun extraction. Run `mad-openspec change check --story N.M --json` for current readiness. Preparation and refinement may continue with `blocked`, `unknown` or `invalid` dependencies. Record open questions and the restriction on implementation. Prepare only the selected story.
+4. **Find or create the link.** Read `mad-openspec status --json`, validate the JSON and inspect the selected link and its diagnostics. A status exit code of 1 caused by an unrelated branch's unknown or invalid dependencies still permits preparation. Refine an existing linked change in place. For a new link, prepare schema-valid JSON with the story ID and source, title, rationale, references, capabilities and requirement operations (`ADDED`, `MODIFIED`, `REMOVED` or `RENAMED`). Include Given/When/Then/And scenarios where applicable and retain every existing scenario for `MODIFIED`. The agent checks whether the requirements cover the story. Run the create command for the selected story, for example:
+
+   ```sh
+   mad-openspec change create --story 1.2 --input planning/story-1.2-change-input.json
+   ```
+
+   Supply `--story-file` only when that file already exists and the user wants close to update its status. On `STORY_ALREADY_LINKED`, refine the linked change. Preserve the registry when resolving ownership conflicts.
+5. **Refine and validate the plan.** Use native OpenSpec status and instructions for the exact change ID to find outstanding artifacts. Complete the specs, design and technical tasks. If a decision depends on missing context, explain what remains and ask specific questions. Verify readiness with native status and strict validation. A scaffold or MadOpenSpec's `active` phase alone cannot establish readiness.
+6. **Request approval.** Present the validated plan, key decisions, open questions and check results. Use `request_user_input_async` to ask in the user's language whether they approve the plan and want to start implementation. For Russian, ask “Утверждаете план и запускаете реализацию истории N.M?” Offer `$mad-openspec-apply story N.M` and “Запросить правки” (localize the latter). Replace both occurrences of `N.M` with the selected `storyId`. If cards are unavailable, present the same question and options in text.
+
+   Wait for the user's submitted reply. A submitted apply choice approves the presented plan and invokes apply for that story, including its fresh targeted dependency check. For revisions, obtain the requested changes, refine the plan in the change, validate it again and present it for approval.
