@@ -70,6 +70,29 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/release
+      - name: Verify the public npm version
+        timeout-minutes: 12
+        shell: bash
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          archive="$RUNNER_TEMP/release/mad-openspec-$version.tgz"
+          expected="sha512-$(openssl dgst -sha512 -binary "$archive" | openssl base64 -A)"
+          for attempt in {1..60}; do
+            if actual=$(curl -fsS --max-time 10 "https://registry.npmjs.org/mad-openspec/$version" | jq -er '.dist.integrity'); then
+              if [[ "$actual" != "$expected" ]]; then
+                echo "Registry integrity differs from the tested archive" >&2
+                exit 1
+              fi
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for mad-openspec@$version" >&2
+          exit 1
       - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
