@@ -6,45 +6,20 @@ MadOpenSpec links each selected BMAD story to one OpenSpec change. Review the pr
 
 ## How the tools fit together
 
-```mermaid
----
-config:
-  themeCSS: |
-    .edgeLabel, .edgeLabel .labelBkg, .edgeLabel p {
-      background-color: #f7fafc;
-      color: #213444;
-      opacity: 1;
-    }
-  flowchart:
-    wrappingWidth: 380
-    rankSpacing: 34
-    padding: 8
-    subGraphTitleMargin:
-      top: 10
-      bottom: 12
----
-flowchart TD
-    accTitle: How the tools fit together
-    accDescr: MadOpenSpec links a selected BMAD story to an OpenSpec change and marks the story done after archiving.
-
-    subgraph change["OpenSpec"]
-        specify["Define expected behavior and tasks<br/>for each change"]:::body
-    end
-    subgraph delivery["MadOpenSpec"]
-        link["Link one story to one change<br/>and coordinate its delivery"]:::body
-    end
-    subgraph backlog["BMAD"]
-        plan["Define requirements, epics, and stories"]:::body
-    end
-
-    backlog -->|Selected story| delivery
-    delivery -->|Prepare linked change| change
-    change -->|Updated specs and archived change| delivery
-    delivery -->|Mark story done| backlog
-
-    classDef card fill:#f7fafc,stroke:#b4c4cf,color:#135da2,font-weight:bold
-    classDef body fill:transparent,stroke:none,color:#213444,font-weight:normal
-    class backlog,delivery,change card
+```text
+BMAD          Plan requirements, epics, and stories
+  |
+  | selected story
+  v
+MadOpenSpec   Link the story to one OpenSpec change
+  |
+  | linked change
+  v
+OpenSpec      Specify behavior and tasks
+  |
+  | updated specs and archived change
+  v
+MadOpenSpec   Mark the linked story done in BMAD
 ```
 
 ## Set up the tools
@@ -92,6 +67,8 @@ Invoke each skill in a separate message to your coding agent.
 3. **Close.** After the checks pass, send `$mad-openspec-close story-1-2`. Review the epic checklist, then commit the code, specs, archive, and updated BMAD and MadOpenSpec records together.
 
 For help choosing the next story, send `$mad-openspec-guide`. For CLI commands, JSON reports, and recovery steps, see the [usage guide](docs/usage.md).
+
+For changes by version, see the [changelog](https://github.com/briginas/MadOpenSpec/blob/main/CHANGELOG.md).
 
 ## Development
 

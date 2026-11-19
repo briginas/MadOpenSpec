@@ -1,6 +1,6 @@
 {
   "name": "mad-openspec",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "Prepare and close BMAD stories through OpenSpec",
   "type": "module",
   "repository": {
@@ -17,6 +17,7 @@
     "node": ">=22.18.0"
   },
   "files": [
+    "CHANGELOG.md",
     "dist/",
     "schemas/",
     "skills/",
