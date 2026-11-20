@@ -86,7 +86,7 @@ The smoke suite exercises the source and packaged CLI in temporary projects. Use
 
 ## Publish a release
 
-Update the version in the package manifest and lockfile, commit the change, then push the commit and its matching stable version tag (for example, `v0.3.8`). GitHub Actions runs CI, installs the release tarball in a clean directory, publishes that tarball to npm, and creates a GitHub Release. The npm trusted publisher is `briginas/MadOpenSpec`, workflow `release.yml`, with direct publishing enabled.
+Update the version in the package manifest and lockfile. Add a matching version section to `CHANGELOG.md` with the user-visible changes, omitting routine upgrade reminders. Commit the changes, then push the commit and its matching stable version tag (for example, `v0.3.8`). GitHub Actions runs CI, installs the release tarball in a clean directory, publishes that tarball to npm, and uses the changelog section as the GitHub Release description. The npm trusted publisher is `briginas/MadOpenSpec`, workflow `release.yml`, with direct publishing enabled.
 
 For the first publication only, set the repository variable `NPM_BOOTSTRAP_TAG` to the first tag before pushing it. Download the successful run's `npm-package` artifact and publish the tarball with `npm publish <tarball> --access public`. Verify installation from npm, create the GitHub Release for the same tag, configure the trusted publisher on npm, and remove the variable.
 
