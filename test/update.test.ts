@@ -81,3 +81,54 @@ test('update before connect upgrades the setup receipt independently', async t =
   assert.equal(JSON.parse(await readFile(receipt, 'utf8')).steps[0].actual, cliVersion);
   assert.equal('.mad-openspec/config.json' in await snapshot(root), false);
 });
+
+test('update from 0.3.9 preserves TOML source and attaches the planning rule once per workflow', async t => {
+  const {root, project} = await configuredFixture(t);
+  const config = path.join(root, '.mad-openspec/config.json');
+  await writeFile(config, JSON.stringify({...project.config, madOpenSpecVersion: '0.3.9'}));
+  const custom = path.join(root, '_bmad/custom');
+  await mkdir(custom, {recursive: true});
+  const reference = 'file:{project-root}/.mad-openspec/bmad-planning.md';
+  const cases = [
+    ['bmad-prd', '[workflow] # team settings\r\npersistent_facts = [\r\n  "our fact", # keep\r\n]\r\n'],
+    ['bmad-spec', 'workflow = { on_complete = "keep" }\n'],
+    ['bmad-correct-course', 'workflow."persistent_facts" = ["fact"]\n'],
+    ['bmad-create-epics-and-stories', '[workflow]\non_complete = "keep"\n']
+  ];
+  for (const [name, source] of cases) await writeFile(path.join(custom, name + '.toml'), source);
+  // BMAD appends the personal array. A pre-existing personal reference is already effective.
+  const personal = `[workflow]\npersistent_facts = ["personal", "${reference}"]\n`;
+  await writeFile(path.join(custom, 'bmad-create-epics-and-stories.user.toml'), personal);
+  const before = await snapshot(root);
+  const preview = await invoke(root, 'update', '--dry-run', '--json');
+  assert.equal(preview.code, 0, preview.stdout);
+  assert.deepEqual(await snapshot(root), before);
+  const result = await invoke(root, 'update', '--json');
+  assert.deepEqual(JSON.parse(result.stdout).files, JSON.parse(preview.stdout).files);
+  const [prd, spec, sprint, epics] = await Promise.all(cases.map(([name]) => readFile(path.join(custom, name + '.toml'), 'utf8')));
+  assert.equal(prd, cases[0][1].replace('"our fact"', `"${reference}", "our fact"`));
+  assert.equal(spec, cases[1][1].replace('on_complete', `persistent_facts = ["${reference}"], on_complete`));
+  assert.equal(sprint, cases[2][1].replace('= [', `= ["${reference}", `));
+  assert.equal(epics, cases[3][1]);
+  assert.equal(await readFile(path.join(custom, 'bmad-create-epics-and-stories.user.toml'), 'utf8'), personal);
+  assert.deepEqual(JSON.parse((await invoke(root, 'update', '--json')).stdout).files, []);
+});
+
+test('invalid team or personal customization blocks update before any writes', async t => {
+  const {root} = await configuredFixture(t);
+  const custom = path.join(root, '_bmad/custom');
+  await mkdir(custom, {recursive: true});
+  for (const [name, content] of [
+    ['bmad-spec.toml', 'invalid TOML'],
+    ['bmad-prd.user.toml', '[workflow]\npersistent_facts = "personal setting"']
+  ]) {
+    const file = path.join(custom, name);
+    await writeFile(file, content);
+    const before = await snapshot(root);
+    const result = await invoke(root, 'update', '--json');
+    assert.equal(JSON.parse(result.stdout).issues[0].code, 'UPDATE_CONFLICT');
+    assert.match(result.stdout, new RegExp(name));
+    assert.deepEqual(await snapshot(root), before);
+    await rm(file);
+  }
+});

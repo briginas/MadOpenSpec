@@ -178,6 +178,16 @@ test('setup installs real BMAD/OpenSpec without backlog then explicit connect co
   const dry=JSON.parse((await success(root,cli,['setup','--dry-run','--json'])).stdout);assert.equal(dry.toolchain,'planned');assert.deepEqual(await readdir(root),[]);
   const legacyInstructions='User instructions\n<!-- OPENSPEC:START -->\nlegacy instructions\n<!-- OPENSPEC:END -->\n';await writeFile(path.join(root,'AGENTS.md'),legacyInstructions);
   const installed=JSON.parse((await success(root,cli,['setup','--json'])).stdout);assert.equal(await readFile(path.join(root,'AGENTS.md'),'utf8'),legacyInstructions);assert.equal(installed.toolchain,'ready');assert.deepEqual(installed.issues,[]);
+  const expectedRule = await readFile(new URL('../assets/bmad-planning.md', import.meta.url), 'utf8');
+  for (const skill of ['bmad-spec', 'bmad-prd', 'bmad-correct-course', 'bmad-create-epics-and-stories']) {
+    const directory = path.join(root, '.agents/skills', skill);
+    assert.match(await readFile(path.join(directory, 'SKILL.md'), 'utf8'), /workflow\.persistent_facts/);
+    const resolved = await exec('python3', ['-B', '_bmad/scripts/resolve_customization.py',
+      '--project-root', root, '--skill', directory, '--key', 'workflow.persistent_facts'], {cwd: root});
+    const facts = JSON.parse(resolved.stdout)['workflow.persistent_facts'];
+    assert.deepEqual(facts, ['file:{project-root}/.mad-openspec/bmad-planning.md']);
+    assert.equal(await readFile(facts[0].replace('file:{project-root}', root), 'utf8'), expectedRule);
+  }
   const configFile = path.join(root, 'openspec/config.yaml');
   const config = parse(await readFile(configFile, 'utf8'));
   assert.match(config.context, /^All artifacts must be written in en\.$/m);

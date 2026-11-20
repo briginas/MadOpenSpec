@@ -19,6 +19,12 @@ Fresh OpenSpec artifacts use English. Setup preserves compatible installations a
 
 Add `--json` to setup or its preview for `steps`, `issues`, `nextSteps`, and the overall `toolchain` result (`planned`, `ready`, `blocked`, or `failed`). If an installer fails, correct the reported issue and rerun setup. For `SETUP_RECOVERY_REQUIRED`, compare the component files with `.mad-openspec/setup-state.json` and resolve the partial installation first.
 
+### Planning changes to an existing product
+
+Setup and update connect a shared planning rule to four BMAD skills through `workflow.persistent_facts` in their project customizations under `_bmad/custom/`. Use the skills as usual. Once the scope is known, they read the affected specifications under `openspec/specs/` and identify accepted behavior, remaining work and constraints to preserve. With no relevant specifications, planning continues as usual.
+
+`$bmad-spec` and `$bmad-prd` compare before recording requirements. Validation reports discrepancies only. `$bmad-correct-course` compares before drafting a sprint change proposal. A direct call to `$bmad-create-epics-and-stories` also checks previously prepared inputs and routes stale requirements through their document owner before drafting affected stories.
+
 ## Connecting a backlog
 
 Run `mad-openspec connect` once BMAD has produced the epics document and sprint status file. Use `--json` to see each chosen path and its source. A compatible manual installation can connect directly.
@@ -177,7 +183,7 @@ mad-openspec update
 mad-openspec status
 ```
 
-Update refreshes the four managed skills, the setup receipt if present, and the version pin in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.8. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed skill was edited locally, save your edits and restore its released contents before retrying.
+Update refreshes the four managed skills, their shared BMAD planning integration, the setup receipt if present, and the version pin in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.9. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed file was edited locally, save your edits and restore its released contents before retrying.
 
 ## Installing Codex skills
 

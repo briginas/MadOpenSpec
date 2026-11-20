@@ -5,6 +5,7 @@ import {asError, CliError} from './errors.ts';
 import {assertWritablePath, readProjectConfig} from './project.ts';
 import {exists, madSkills, sources} from './setup.ts';
 import {atomicWrite, withProjectLock} from './state.ts';
+import {planPlanningRule} from './planning-rule.ts';
 import {canUpdate, checkVersion, cliVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
 
 // Accepted earlier contents of each managed skill, through release 0.3.8.
@@ -43,7 +44,7 @@ async function planUpdate(root: string) {
     if (version !== undefined && !canUpdate(version)) checkVersion(version);
   }
 
-  const writes = new Map<string, string>();
+  const writes = await planPlanningRule(root, 'UPDATE_CONFLICT');
   for (const name of madSkills) {
     const relative = path.join('.agents', 'skills', name, 'SKILL.md');
     const file = await assertWritablePath(root, relative);

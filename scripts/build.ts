@@ -9,7 +9,7 @@ const result = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
 await mkdir(dist, {recursive: true});
-for (const asset of ['package.json', 'schemas', 'skills']) {
+for (const asset of ['package.json', 'schemas', 'skills', 'assets']) {
   await cp(new URL(`../${asset}`, import.meta.url), new URL(asset, dist), {
     recursive: true,
     filter: source => !source.endsWith('/.DS_Store')

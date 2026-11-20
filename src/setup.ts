@@ -16,6 +16,7 @@ import {atomicWrite, withProjectLock} from './state.ts';
 import {CliError, problem} from './errors.ts';
 import {cliVersion, checkVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
 import {makeInstallers, bmadBin} from './installers.ts';
+import {planPlanningRule} from './planning-rule.ts';
 
 export const openSkills=['explore','propose','apply-change','update-change','sync-specs','archive-change'].map(x=>`openspec-${x}`);
 export const madSkills=['mad-openspec-guide','mad-openspec-prepare','mad-openspec-apply','mad-openspec-close'];
@@ -119,7 +120,9 @@ async function probeOpen(root: string,openRoot: string): Promise<Probe>{
 }
 async function probeMad(root: string): Promise<Probe>{
   for(const name of madSkills){const dir=await assertWritablePath(root,`.agents/skills/${name}`);if(await exists(dir)&&JSON.stringify(await tree(root,dir))!==JSON.stringify(await tree(sources,path.join(sources,name))))conflict(`Skill отличается от поставляемого: ${name}`);}
-  return {action:(await Promise.all(madSkills.map(n=>exists(path.join(root,'.agents/skills',n))))).every(Boolean)?'skip':'install',actual:null};
+  const ruleWrites = await planPlanningRule(root, 'SETUP_CONFLICT');
+  const allInstalled = (await Promise.all(madSkills.map(n=>exists(path.join(root,'.agents/skills',n))))).every(Boolean);
+  return {action: allInstalled ? (ruleWrites.size ? 'configure' : 'skip') : 'install', actual: null};
 }
 async function plan(root: string,options: SetupOptions){
   for(const file of ['_bmad','_bmad-output','.gitignore','.agents/skills','.mad-openspec/setup-state.json',options.openspecRoot??'.'])await assertWritablePath(root,file);
@@ -183,7 +186,11 @@ export async function setupProject(root: string,options: SetupOptions={},deps: {
               if(step.action==='install')await publishDirectory(root,path.join(p.openRoot,'openspec'),path.join(stage,'openspec'));
               for(const name of openSkills){const dest=path.join(p.openRoot,'.agents/skills',name);if(!await exists(dest))await publishDirectory(root,dest,path.join(stage,'.agents/skills',name));}
             }finally{await rm(stage,{recursive:true,force:true});}
-          }else for(const name of madSkills)await copySkill(root,name);
+          }else {
+            const ruleWrites = await planPlanningRule(root, 'SETUP_CONFLICT');
+            for(const name of madSkills)await copySkill(root,name);
+            for (const [file, text] of ruleWrites) await atomicWrite(root, file, text);
+          }
           const verify=step.id==='bmad'?await probeBmad(root,p.settings):step.id==='openspec'?await probeOpen(root,p.openRoot):await probeMad(root);
           if(verify.action!=='skip')throw new CliError('SETUP_POSTCONDITION_FAILED',`Installer не подготовил компонент ${step.id}`);
           step.actual=step.expected;step.result='completed';await persist();
