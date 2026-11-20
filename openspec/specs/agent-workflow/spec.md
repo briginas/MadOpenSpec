@@ -38,7 +38,7 @@ The preparation skill SHALL direct the agent to read the selected story, related
 
 ### Requirement: Change refinement and approval
 
-After generation, the skill SHALL direct the agent to refine the specs, design, and tasks and present the change to the user before implementation. Refinements MUST stay in the change. BMAD requirements, architecture, and backlog documents retain their original content.
+After generation, the skill SHALL direct the agent to refine the specs, design, and tasks and present the change to the user before implementation. OpenSpec refinements MUST stay in the change. Changes to BMAD source requirements MUST go through their owning BMAD workflows before the linked change is refined against them.
 
 #### Scenario: Refine a scenario in a change
 - **WHEN** the agent refines a generated change
@@ -153,3 +153,29 @@ The four MadOpenSpec skills SHALL use `request_user_input_async` when available,
 #### Scenario: Preserve progress in a text-only client
 - **WHEN** apply or close offers a next step without a choice card
 - **THEN** the question and the same options precede the final verbatim CLI output block
+
+### Requirement: Handle changes to an approved story during apply
+
+The apply skill SHALL distinguish implementation adjustments from changes to an agreed requirement or acceptance criterion. On a changed outcome it MUST pause implementation and task completion, state the old and new criterion and affected documents, and carry forward any explicit user decision.
+
+#### Scenario: Repair the parser to meet the approved criterion
+- **WHEN** the parser needs a fix to find a house in NSPD and confirm its cadastral number as agreed
+- **THEN** the agent continues the current OpenSpec apply and verifies the existing criterion
+
+#### Scenario: Accept a map outline and defer confirmation to scene creation
+- **WHEN** the user decides that displaying a Yandex or OSM building outline suffices at lookup and that house confirmation is required separately at scene creation
+- **THEN** the agent pauses code edits and task completion and records the changed criterion and affected BMAD and OpenSpec documents
+- **AND** it uses the decision without asking the user to choose the behavior again
+
+#### Scenario: Update affected BMAD sources
+- **WHEN** the changed criterion affects BMAD planning content
+- **THEN** the agent identifies the installed workflows owning the story, epic, requirements source (PRD or `SPEC.md`) and architecture and uses the owners to update the affected artifacts
+- **AND** apply makes no direct BMAD edits, including to `epics.md`
+- **AND** if a required workflow cannot update an artifact, the agent names the workflow, artifact and blocker and keeps implementation paused
+
+#### Scenario: Reconcile completed work and resume the same story
+- **WHEN** the affected BMAD documents reflect the decision
+- **THEN** the agent invokes prepare for the same story ID and refines requirements, design, tasks and verification in the existing linked change
+- **AND** it retains work and completion marks supported by the revised criteria and reopens tasks needing changes
+- **AND** after strict validation succeeds it presents the revised plan for approval
+- **AND** only after approval does it invoke MadOpenSpec apply for the same story and require a fresh successful `mad-openspec change check --story N.M --json` before resuming OpenSpec implementation

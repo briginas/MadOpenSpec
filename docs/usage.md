@@ -177,7 +177,7 @@ mad-openspec update
 mad-openspec status
 ```
 
-Update refreshes the four managed skills, the setup receipt if present, and the version pin in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.7. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed skill was edited locally, save your edits and restore its released contents before retrying.
+Update refreshes the four managed skills, the setup receipt if present, and the version pin in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.8. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed skill was edited locally, save your edits and restore its released contents before retrying.
 
 ## Installing Codex skills
 

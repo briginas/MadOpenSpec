@@ -40,7 +40,7 @@ export function checkVersion(projectVersion: string | null) {
 
 // Add a source release here when its project files have an upgrade path.
 export function canUpdate(version: string) {
-  return ['0.3.3', '0.3.4', '0.3.5', '0.3.6', '0.3.7', cliVersion].includes(version);
+  return ['0.3.3', '0.3.4', '0.3.5', '0.3.6', '0.3.7', '0.3.8', cliVersion].includes(version);
 }
 
 export async function checkSetupVersion(root: string) {

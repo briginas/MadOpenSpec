@@ -7,7 +7,7 @@ import {exists, madSkills, sources} from './setup.ts';
 import {atomicWrite, withProjectLock} from './state.ts';
 import {canUpdate, checkVersion, cliVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
 
-// Accepted earlier contents of each managed skill, through release 0.3.6.
+// Accepted earlier contents of each managed skill, through release 0.3.8.
 const legacySkills: Record<string, readonly string[]> = {
   'mad-openspec-guide': [
     '29f9f88e54cf1c3542367431c21d1740089714bc01f678ac012a93e27a1451b5',
@@ -17,7 +17,8 @@ const legacySkills: Record<string, readonly string[]> = {
   'mad-openspec-apply': [
     'f3033a8c3d3f1a8e9de92f734745a7cc8c8de10d8b263bd3baf84167dc25b268',
     '6826fc29e7da084c117a4f2efde8c38af01e314f93d8a0a63336d5ceef483eaa',
-    '4a013237b6400746b90f79dba07033b568a3044a1a8b5ba8a82998819caec256'
+    '4a013237b6400746b90f79dba07033b568a3044a1a8b5ba8a82998819caec256',
+    '62d0e0177b80f4ff3d63dfd72e82583031d13a7fbc274c2e1da4dc3c0a3172f2'
   ],
   'mad-openspec-close': [
     '4e3cc0690bd2cc4329681a0d7ee8700d39327179987baac0da5db4d4d7a17fa8',
