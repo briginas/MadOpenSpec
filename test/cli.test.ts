@@ -172,7 +172,7 @@ test('setup CLI supports dry-run JSON without integration and rejects invalid ar
   const {mkdtemp,realpath,rm,readdir}=await import('node:fs/promises');const os=await import('node:os');
   const root=await realpath(await mkdtemp(path.join(os.tmpdir(),'mad-cli-setup-')));t.after(()=>rm(root,{recursive:true,force:true}));
   const result=await invoke(['setup','--dry-run','--json'],root);assert.equal(result.code,0);assert.equal(JSON.parse(result.stdout).toolchain,'planned');assert.deepEqual(await readdir(root),[]);
-  for(const argv of [['setup','--bad','--json'],['setup','--user-name',''],['setup','--dry-run','--dry-run']])assert.equal((await invoke(argv,root)).code,2);
+  for(const argv of [['setup','--bad','--json'],['setup','--bmad-profile','unknown','--json'],['setup','--user-name',''],['setup','--dry-run','--dry-run']])assert.equal((await invoke(argv,root)).code,2);
   await writeFile(path.join(root,'file'),'x');
   assert.match((await invoke(['setup','--help'],root)).stdout,/setup/);
 });

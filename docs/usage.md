@@ -10,10 +10,15 @@ Run shell commands from the **target project root**. Send skills beginning with 
 
 | To configure | Option | Default for a new project |
 | --- | --- | --- |
+| BMAD skill profile | `--bmad-profile planning\|full` | `planning` |
 | BMAD user name | `--user-name <name>` | `Developer` |
 | BMAD conversation language | `--communication-language <language>` | `Russian` |
 | BMAD document language | `--document-output-language <language>` | `Russian` |
 | OpenSpec location | `--openspec-root <directory>` | Project root (the parent of `openspec/`) |
+
+The default `planning` profile installs thirteen BMAD skills for Codex. The planning workflows are `bmad-product-brief`, `bmad-spec`, `bmad-prd`, `bmad-architecture`, `bmad-ux`, `bmad-brainstorming`, `bmad-create-epics-and-stories`, `bmad-sprint-planning`, and `bmad-correct-course`. Their completion, review and facilitation steps use `bmad-help`, `bmad-review`, `bmad-advanced-elicitation`, and `bmad-party-mode`.
+
+Use `mad-openspec setup --bmad-profile full` on a fresh project to install all core/BMM skills. Repeat setup reuses the installed profile. Existing full installations keep their skills. To migrate an existing full installation, run `mad-openspec setup --bmad-profile planning --dry-run` to list the skills selected for removal, then `mad-openspec setup --bmad-profile planning` to apply. Setup checks the selected directories against the pinned BMAD package before removal. A locally changed or additional file blocks migration and the diagnostic gives its path. The migration updates the two manifests, the help catalogs and the setup receipt. It preserves BMAD customizations, backlog documents, story links and unrelated project skills. Setup keeps originals under `.mad-openspec/bmad-profile-migration/` until verification and restores them on an error. If a process interruption leaves this directory behind, setup reports `SETUP_RECOVERY_REQUIRED` and preserves the saved files for recovery.
 
 Fresh OpenSpec artifacts use English. Setup preserves compatible installations and their settings. It reports conflicts for incompatible versions, modified skills, conflicting explicit settings, or unsafe paths. Keep the OpenSpec store inside the project and use the built-in schema without overrides.
 

@@ -9,7 +9,9 @@ import {readFile, writeFile, readdir, access, mkdir, symlink, copyFile} from 'no
 import {fileURLToPath} from 'node:url';
 import path from 'node:path';
 import {parse} from 'yaml';
-import {makeProjectFixture, snapshot} from './helpers/project.ts';
+import {makeProjectFixture, readyChangeFixture, snapshot} from './helpers/project.ts';
+import {migrateBmad, planBmadMigration} from '../src/bmad-migration.ts';
+import {planningSkillIds, readBmadCatalog} from '../src/bmad-profile.ts';
 import {openSpecBin} from '../src/openspec.ts';
 
 const exec = promisify(execFile);
@@ -178,6 +180,18 @@ test('setup installs real BMAD/OpenSpec without backlog then explicit connect co
   const dry=JSON.parse((await success(root,cli,['setup','--dry-run','--json'])).stdout);assert.equal(dry.toolchain,'planned');assert.deepEqual(await readdir(root),[]);
   const legacyInstructions='User instructions\n<!-- OPENSPEC:START -->\nlegacy instructions\n<!-- OPENSPEC:END -->\n';await writeFile(path.join(root,'AGENTS.md'),legacyInstructions);
   const installed=JSON.parse((await success(root,cli,['setup','--json'])).stdout);assert.equal(await readFile(path.join(root,'AGENTS.md'),'utf8'),legacyInstructions);assert.equal(installed.toolchain,'ready');assert.deepEqual(installed.issues,[]);
+  assert.equal(dry.steps[0].profile, 'planning');
+  assert.deepEqual((await readdir(path.join(root, '.agents/skills'))).filter(id => id.startsWith('bmad-')).sort(), [...planningSkillIds].sort());
+  const runtime = path.join(root, '_bmad');
+  const catalog = await readBmadCatalog(path.join(runtime, '_config/skill-manifest.csv'));
+  assert.deepEqual(catalog.map(row => row.canonicalId).sort(), [...planningSkillIds].sort());
+  for (const file of ['_config/bmad-help.csv', 'core/module-help.csv', 'bmm/module-help.csv']) {
+    const rows = await readBmadCatalog(path.join(runtime, file));
+    assert.ok(rows.every(row => row.skill === '_meta' || planningSkillIds.includes(row.skill)));
+  }
+  const files = await readBmadCatalog(path.join(runtime, '_config/files-manifest.csv'));
+  assert.ok(files.every(row => !row.path.includes('/bmad-build/')));
+  assert.ok((await readFile(path.join(runtime, 'config.toml'), 'utf8')).includes(JSON.stringify(path.basename(root))));
   const expectedRule = await readFile(new URL('../assets/bmad-planning.md', import.meta.url), 'utf8');
   for (const skill of ['bmad-spec', 'bmad-prd', 'bmad-correct-course', 'bmad-create-epics-and-stories']) {
     const directory = path.join(root, '.agents/skills', skill);
@@ -227,11 +241,58 @@ test('connect auto-discovery uses BMAD overrides without setup and preserves sav
   await writeFile(path.join(f.root,'_bmad/custom/config.toml'),'invalid');await success(f.root,cli,['connect']);assert.equal(JSON.parse((await success(f.root,cli,['status','--json'])).stdout).stories.length,2);
 });
 
-test('real setup skips BMAD after a failed OpenSpec step and keeps global config isolated',async t=>{
+test('real full setup retains all BMAD skills and reuses the profile after a failed OpenSpec step',async t=>{
   const {mkdtemp,realpath,rm}=await import('node:fs/promises');const os=await import('node:os');const {setupProject}=await import('../src/setup.ts');const {makeInstallers}=await import('../src/installers.ts');
   const root=await realpath(await mkdtemp(path.join(os.tmpdir(),'Mad partial setup ')));t.after(()=>rm(root,{recursive:true,force:true}));
-  const actual=makeInstallers();const first=await setupProject(root,{}, {installers:{...actual,openspec:async()=>{throw new Error('forced OpenSpec failure');}}});assert.equal(first.toolchain,'failed');assert.equal(first.steps[0].result,'completed');
+  const actual=makeInstallers();const first=await setupProject(root,{bmadProfile:'full'}, {installers:{...actual,openspec:async()=>{throw new Error('forced OpenSpec failure');}}});assert.equal(first.toolchain,'failed');assert.equal(first.steps[0].result,'completed');
+  await access(path.join(root, '.agents/skills/bmad-build/SKILL.md'));
   const retry=await setupProject(root,{}, {installers:{...actual,bmad:async()=>{throw new Error('must skip already installed BMAD');}}});assert.equal(retry.toolchain,'ready');assert.equal(retry.steps[0].action,'skip');
+  assert.equal(retry.steps[0].profile, 'full');
+});
+
+test('migrate full BMAD with a preview, local edit checks, rollback and repeat', async t => {
+  const {root} = await readyChangeFixture(t);
+  // Replace the fixture runtime while retaining its active change, backlog and story link.
+  const {rm} = await import('node:fs/promises');
+  await rm(path.join(root, '_bmad'), {recursive:true});
+  const {makeInstallers} = await import('../src/installers.ts');
+  await makeInstallers().bmad(root, {userName:'Alice', communicationLanguage:'Russian', documentOutputLanguage:'English'});
+  const {setupProject} = await import('../src/setup.ts');
+  const full = await setupProject(root, {bmadProfile:'full'});
+  assert.equal(full.toolchain, 'ready', JSON.stringify(full.issues));
+  const request = {bmadProfile:'planning'} as const;
+  const skillRoot = path.join(root, '.agents/skills/bmad-build');
+  const original = await readFile(path.join(skillRoot, 'SKILL.md'));
+  for (const name of ['custom.md', 'SKILL.md']) {
+    await writeFile(path.join(skillRoot, name), 'local work');
+    const before = await snapshot(root);
+    const result = await setupProject(root, request);
+    assert.equal(result.toolchain, 'blocked');
+    assert.match(result.issues[0].message, /bmad-build/);
+    assert.deepEqual(await snapshot(root), before);
+    if (name === 'SKILL.md') await writeFile(path.join(skillRoot, name), original);
+    else await rm(path.join(skillRoot, name));
+  }
+  const before = await snapshot(root);
+  const preview = await setupProject(root, {...request, dryRun:true});
+  assert.equal(preview.steps[0].action, 'migrate');
+  const removed = preview.steps[0].removeSkills!;
+  assert.ok(removed.includes('bmad-build'));
+  assert.deepEqual(await snapshot(root), before);
+  const migration = await planBmadMigration(root);
+  await assert.rejects(migrateBmad(root, migration, async () => {throw new Error('receipt failed');}), /receipt failed/);
+  assert.deepEqual(await snapshot(root), before);
+  const applied = await setupProject(root, request);
+  assert.equal(applied.toolchain, 'ready', JSON.stringify(applied.issues));
+  const after = await snapshot(root);
+  const catalogs = new Set([...migration.catalogs.keys()].map(file => path.join('_bmad', file)));
+  for (const [file, contents] of Object.entries(before)) {
+    if (removed.some(id => file.startsWith(path.join('.agents', 'skills', id) + path.sep))) assert.ok(!(file in after), file);
+    else if (!catalogs.has(file) && file !== path.join('.mad-openspec', 'setup-state.json')) assert.equal(after[file], contents, file);
+  }
+  assert.deepEqual((await readdir(path.join(root, '.agents/skills'))).filter(id => id.startsWith('bmad-')).sort(), [...planningSkillIds].sort());
+  assert.ok((await setupProject(root)).steps.every(step => step.action === 'skip'));
+  assert.deepEqual(await snapshot(root), after);
 });
 
 test('packed CLI runs inside node_modules and includes runtime assets', async t => {

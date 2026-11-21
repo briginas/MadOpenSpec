@@ -37,7 +37,7 @@ mad-openspec setup --dry-run --document-output-language English
 mad-openspec setup --document-output-language English
 ```
 
-This sets up a new project with English documents and Russian BMAD conversations. For a project already using an earlier version, follow [Updating a project](docs/usage.md#update-madopenspec-in-an-existing-project).
+This sets up a new project with English documents, Russian BMAD conversations, and the BMAD planning skills. To install the complete BMAD core/BMM skill set in a new project, add `--bmad-profile full`. For a project already using an earlier version, follow [Updating a project](docs/usage.md#update-madopenspec-in-an-existing-project).
 
 ## Connect the backlog
 

@@ -1,10 +1,9 @@
-import type {SetupOptions, SetupSettings, SetupStep, SetupReport, Installers, Issue} from './types.ts';
+import type {BmadProfile, SetupOptions, SetupSettings, SetupStep, SetupReport, Installers, Issue} from './types.ts';
 
 interface ConfigMap {[key: string]: unknown}
-interface Probe {action: string; actual: string | null; core?: ConfigMap}
+interface Probe {action: string; actual: string | null; core?: ConfigMap; profile?: BmadProfile; migration?: Awaited<ReturnType<typeof planBmadMigration>>}
 import {asError} from './errors.ts';
 import {readFile, readdir, lstat, realpath, mkdir, cp, rename, rm, mkdtemp} from 'node:fs/promises';
-import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import path from 'node:path';
@@ -15,7 +14,9 @@ import {assertWritablePath, readProjectConfig} from './project.ts';
 import {atomicWrite, withProjectLock} from './state.ts';
 import {CliError, problem} from './errors.ts';
 import {cliVersion, checkVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
-import {makeInstallers, bmadBin} from './installers.ts';
+import {makeInstallers} from './installers.ts';
+import {matchesPlanningProfile, planningSkillIds, preparePlanningCatalogs, readBmadCatalog} from './bmad-profile.ts';
+import {migrateBmad, migrationBackup, planBmadMigration} from './bmad-migration.ts';
 import {planPlanningRule} from './planning-rule.ts';
 
 export const openSkills=['explore','propose','apply-change','update-change','sync-specs','archive-change'].map(x=>`openspec-${x}`);
@@ -58,11 +59,11 @@ export async function copySkill(root: string,name: string,sourceRoot=sources){
   const temp=path.join(path.dirname(target),`.${name}.tmp-${randomUUID()}`);
   try{await cp(source,temp,{recursive:true,errorOnExist:true,force:false});await assertWritablePath(root,target);if(await exists(target))conflict(`Skill появился во время установки: ${name}`);await rename(temp,target);}finally{await rm(temp,{recursive:true,force:true});}
 }
-async function probeBmad(root: string,options: SetupOptions): Promise<Probe>{
+async function probeBmad(root: string,options: SetupOptions, allowMigration = false): Promise<Probe>{
   if(!await exists(path.join(root,'_bmad'))){
     const skills=path.join(root,'.agents/skills');
     if(await exists(skills)&&(await readdir(skills)).some(n=>n.startsWith('bmad-')))conflict('Skills BMAD существуют без полной установки _bmad; требуется ручная проверка');
-    return {action:'install',actual:null};
+    return {action:'install',actual:null,profile:options.bmadProfile ?? 'planning'};
   }
   const manifest=await yaml(await assertWritablePath(root,'_bmad/_config/manifest.yaml'));
   if((manifest?.installation as {version?: string} | undefined)?.version!=='6.12.4')conflict('Требуется BMAD 6.12.4; автоматическое обновление запрещено');
@@ -70,8 +71,17 @@ async function probeBmad(root: string,options: SetupOptions): Promise<Probe>{
   for(const file of ['core/module-help.csv','bmm/module-help.csv','scripts/resolve_config.py','scripts/config_utils.py','scripts/render_skill.py','scripts/resolve_customization.py','_config/skill-manifest.csv','_config/files-manifest.csv']){
     const f=await assertWritablePath(root,`_bmad/${file}`);if(!(await lstat(f)).isFile())conflict(`Отсутствует файл BMAD: ${file}`);
   }
-  const parseCsv=createRequire(bmadBin())('csv-parse/sync').parse;
-  const skills: {name: string; path: string; canonicalId: string}[]=parseCsv(await readFile(path.join(root,'_bmad/_config/skill-manifest.csv'),'utf8'),{columns:true,skip_empty_lines:true});
+  const skills = await readBmadCatalog(path.join(root,'_bmad/_config/skill-manifest.csv'));
+  const profile = matchesPlanningProfile(skills.map(skill => skill.canonicalId)) ? 'planning' : 'full';
+  const migrate = allowMigration && profile === 'full' && options.bmadProfile === 'planning';
+  if (!migrate && options.bmadProfile && options.bmadProfile !== profile) {
+    conflict(`Состав установки BMAD отличается от профиля ${options.bmadProfile}; проверьте _bmad/_config/skill-manifest.csv`);
+  }
+  if (profile === 'planning') {
+    const help = await readBmadCatalog(await assertWritablePath(root, '_bmad/_config/bmad-help.csv'));
+    const listed = help.filter(row => row.skill !== '_meta').map(row => row.skill);
+    if (!matchesPlanningProfile([...new Set(listed)])) conflict('Каталог bmad-help.csv не соответствует профилю planning');
+  }
   if(!skills.length)conflict('Пустой skill manifest BMAD');
   for(const skill of skills){
     if(!/^[a-z][a-z0-9-]*$/.test(skill.name)||typeof skill.path!=='string'||!skill.path.startsWith('_bmad/'))conflict('Неверный skill manifest BMAD');
@@ -79,7 +89,7 @@ async function probeBmad(root: string,options: SetupOptions): Promise<Probe>{
     if(!/^[a-z][a-z0-9-]*$/.test(skill.canonicalId))conflict('Неверный canonical ID skill BMAD');
     const f=await assertWritablePath(root,file);if(!(await lstat(f)).isFile())conflict(`Отсутствует skill BMAD: ${file}`);
   }
-  const files: {path: string}[]=parseCsv(await readFile(path.join(root,'_bmad/_config/files-manifest.csv'),'utf8'),{columns:true,skip_empty_lines:true});
+  const files = await readBmadCatalog(path.join(root,'_bmad/_config/files-manifest.csv'));
   if(!files.length)conflict('Пустой files manifest BMAD');
   for(const file of files){
     if(typeof file.path!=='string'||!file.path||path.isAbsolute(file.path)||file.path.split(/[\\/]/).includes('..'))conflict('Неверный files manifest BMAD');
@@ -97,7 +107,13 @@ async function probeBmad(root: string,options: SetupOptions): Promise<Probe>{
     if(typeof core?.[key]!=='string'||!core[key])conflict(`Неверная настройка BMAD: ${key}`);
     if(options[arg]!==undefined&&core[key]!==options[arg])conflict(`Настройка ${arg} отличается от существующей`);
   }
-  return {action:'skip',actual:'6.12.4',core};
+  if (migrate) {
+    if ((manifest.modules as unknown[]).length !== 2 || (manifest.ides as unknown[]).length !== 1) {
+      conflict('Миграция поддерживает установку BMAD core/BMM для Codex; каталоги также используются другими модулями или IDE');
+    }
+    return {action:'migrate', actual:'6.12.4', core, profile:'planning', migration:await planBmadMigration(root)};
+  }
+  return {action:'skip',actual:'6.12.4',core,profile};
 }
 async function probeOpen(root: string,openRoot: string): Promise<Probe>{
   const dir=await assertWritablePath(root,path.join(openRoot,'openspec'));
@@ -142,17 +158,36 @@ async function plan(root: string,options: SetupOptions){
     const canonical=async (p: string)=>await exists(p)?realpath(p):p;
     if(await canonical(previous)!==await canonical(requested))conflict('openspec-root отличается от сохранённого setup; автоматическая смена назначения запрещена');
   }
-  for(const key of (Object.keys(settings) as (keyof SetupSettings)[]))if(options[key]!==undefined){if(typeof options[key]!=='string'||!options[key].trim())throw new CliError('INVALID_ARGUMENTS',`Пустая настройка ${key}`);settings[key]=options[key];}
+  if (await exists(await assertWritablePath(root, migrationBackup))) {
+    throw new CliError('SETUP_RECOVERY_REQUIRED', `Обнаружена незавершённая миграция BMAD; проверьте резервные файлы в ${migrationBackup}`);
+  }
+  const allowMigration = options.bmadProfile === 'planning' && settings.bmadProfile !== 'planning';
+  if (!allowMigration && settings.bmadProfile && options.bmadProfile && settings.bmadProfile !== options.bmadProfile) {
+    conflict(`Для проекта сохранён профиль BMAD ${settings.bmadProfile}, запрошен ${options.bmadProfile}`);
+  }
+  for(const key of ['openspecRoot','userName','communicationLanguage','documentOutputLanguage'] as const)if(options[key]!==undefined){if(typeof options[key]!=='string'||!options[key].trim())throw new CliError('INVALID_ARGUMENTS',`Пустая настройка ${key}`);settings[key]=options[key];}
   const openRoot=await assertWritablePath(root,settings.openspecRoot);
   for(const directory of [path.join(root,'_bmad'),path.join(root,'.agents/skills'),path.join(openRoot,'openspec'),path.join(openRoot,'.agents/skills')])await checkTreePaths(root,directory);
-  const checks=[()=>probeBmad(root,options),()=>probeOpen(root,openRoot),()=>probeMad(root)];
+  const checks=[()=>probeBmad(root,{...options,bmadProfile: options.bmadProfile ?? settings.bmadProfile}, allowMigration),()=>probeOpen(root,openRoot),()=>probeMad(root)];
+  let migration: Probe['migration'];
   const steps: SetupStep[]=[],issues: Issue[]=[];
   for(let i=0;i<checks.length;i++){
     const id=['bmad','openspec','mad-openspec-skills'][i],expected=['6.12.4','1.16.0',cliVersion][i];
-    try{const p=await checks[i]();if(i===0&&p.core)for(const [arg,key]of [['userName','user_name'],['communicationLanguage','communication_language'],['documentOutputLanguage','document_output_language']] as const)settings[arg]=p.core[key] as string;steps.push({id,expected,actual:p.action==='skip' ? expected : p.actual,action:p.action,result:'planned'});}
+    try {
+      const probe = await checks[i]();
+      if (probe.migration) migration = probe.migration;
+      if (probe.profile) settings.bmadProfile = probe.profile;
+      if (probe.core) {
+        settings.userName = probe.core.user_name as string;
+        settings.communicationLanguage = probe.core.communication_language as string;
+        settings.documentOutputLanguage = probe.core.document_output_language as string;
+      }
+      steps.push({id, expected, profile: probe.profile, removeSkills: probe.migration?.removed.map(row => row.canonicalId), actual: probe.action === 'skip' ? expected : probe.actual,
+        action: probe.action, result: 'planned'});
+    }
     catch (caught) {const error = asError(caught);steps.push({id,expected,actual:null,action:'blocked',result:'not-run'});issues.push(problem(error.code==='ENOENT'?new CliError('SETUP_RECOVERY_REQUIRED',`Неполная установка ${id}; проверьте отсутствующие файлы вручную`):error));}
   }
-  return {settings,openRoot,steps,issues};
+  return {settings,openRoot,steps,issues,migration};
 }
 async function checkTreePaths(root: string,directory: string): Promise<void>{
   await assertWritablePath(root,directory);
@@ -171,13 +206,25 @@ export async function setupProject(root: string,options: SetupOptions={},deps: {
     return await withProjectLock(root,async()=>{
       p=await plan(root,options);report.steps=p.steps;report.issues=p.issues;if(p.issues.length)return report;
       for(const s of p.steps)s.result=s.action==='skip'?'skipped':'not-run';
-      if(p.steps.some(s=>s.action!=='skip'))await installers.prerequisite?.();
+      if(p.steps.some(s=>s.action!=='skip' && s.action!=='migrate'))await installers.prerequisite?.();
       const persist=()=>atomicWrite(root,setupStatePath,`${JSON.stringify({schemaVersion:1,settings:p.settings,steps:p.steps},null,2)}\n`);
       for(const step of p.steps){
         if(step.action==='skip')continue;
         try{
+          if (step.action === 'migrate' && p.migration) {
+            await migrateBmad(root, p.migration, async () => {
+              const result = await probeBmad(root, p.settings);
+              if (result.action !== 'skip') throw new CliError('SETUP_POSTCONDITION_FAILED','Не удалось подтвердить миграцию BMAD');
+              step.result = 'completed';
+              await persist();
+            });
+            continue;
+          }
           step.result='running';await persist();
-          if(step.id==='bmad')await installers.bmad(root,p.settings);
+          if(step.id==='bmad'){
+            if (p.settings.bmadProfile === 'planning') await installPlanningBmad(root, p.settings, installers);
+            else await installers.bmad(root, p.settings);
+          }
           else if(step.id==='openspec'){
             const stage=await mkdtemp(path.join(os.tmpdir(),'mad-open-stage-'));
             try{
@@ -194,16 +241,36 @@ export async function setupProject(root: string,options: SetupOptions={},deps: {
           const verify=step.id==='bmad'?await probeBmad(root,p.settings):step.id==='openspec'?await probeOpen(root,p.openRoot):await probeMad(root);
           if(verify.action!=='skip')throw new CliError('SETUP_POSTCONDITION_FAILED',`Installer не подготовил компонент ${step.id}`);
           step.actual=step.expected;step.result='completed';await persist();
-        }catch (caught) {const error = asError(caught);step.result='failed';report.issues.push(problem(error));report.toolchain='failed';await persist();return report;}
+        }catch (caught) {const error = asError(caught);step.result='failed';report.issues.push(problem(error));report.toolchain='failed';if(step.action!=='migrate')await persist();return report;}
       }
       if (!await exists(path.join(root, setupStatePath))) await persist();
       report.toolchain='ready';report.nextSteps=['Подготовьте epics и sprint status средствами BMAD, затем отдельно выполните mad-openspec connect.'];return report;
     });
   }catch (caught) {const error = asError(caught);report.issues.push(problem(error));return report;}
 }
+async function installPlanningBmad(root: string, settings: SetupSettings, installers: Installers) {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'mad-bmad-stage-'));
+  try {
+    const stage = path.join(temporary, path.basename(root));
+    await mkdir(stage);
+    await installers.bmad(stage, settings);
+    await preparePlanningCatalogs(stage);
+    await probeBmad(stage, settings);
+    const output = await assertWritablePath(root, '_bmad-output');
+    await mkdir(output, {recursive: true});
+    for (const id of planningSkillIds) {
+      const skill = path.join('.agents', 'skills', id);
+      await publishDirectory(root, path.join(root, skill), path.join(stage, skill));
+    }
+    await publishDirectory(root, path.join(root, '_bmad'), path.join(stage, '_bmad'));
+  } finally {
+    await rm(temporary, {recursive: true, force: true});
+  }
+}
+
 async function publishDirectory(root: string,dest: string,source: string){
   await assertWritablePath(root,dest);await mkdir(path.dirname(dest),{recursive:true});
   const temp=`${dest}.tmp-${randomUUID()}`;
   try{await cp(source,temp,{recursive:true,errorOnExist:true,force:false});await assertWritablePath(root,dest);if(await exists(dest))conflict(`Назначение уже существует: ${dest}`);await rename(temp,dest);}finally{await rm(temp,{recursive:true,force:true});}
 }
-export function formatSetup(report: SetupReport){return report.steps.map(s=>`${s.id}: ${s.action} (${s.result})\n`).join('')+report.issues.map(i=>`${i.code}: ${i.message}\n`).join('')+report.nextSteps.map(s=>`${s}\n`).join('');}
+export function formatSetup(report: SetupReport){return report.steps.map(s=>`${s.id}${s.profile ? ' [' + s.profile + ']' : ''}: ${s.action} (${s.result})\n${s.removeSkills ? '  Удаляемые скилы: ' + s.removeSkills.join(', ') + '\n' : ''}`).join('')+report.issues.map(i=>`${i.code}: ${i.message}\n`).join('')+report.nextSteps.map(s=>`${s}\n`).join('');}

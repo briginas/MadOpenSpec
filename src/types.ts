@@ -170,7 +170,9 @@ export interface OpenSpec {
 export interface ProcessOptions {cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number}
 export interface ProcessResult {code: number | null; stdout: string; stderr: string}
 export type ProcessRunner = (file: string, args: string[], options?: ProcessOptions) => Promise<ProcessResult>;
+export type BmadProfile = 'planning' | 'full';
 export interface SetupSettings {
+  bmadProfile?: BmadProfile;
   userName: string;
   communicationLanguage: string;
   documentOutputLanguage: string;
@@ -182,7 +184,7 @@ export interface Installers {
   bmad(root: string, settings: Omit<SetupSettings, 'openspecRoot'>): Promise<void>;
   openspec(root: string): Promise<void>;
 }
-export interface SetupStep {id: string; expected: string; actual: string | null; action: string; result: string}
+export interface SetupStep {id: string; profile?: BmadProfile; removeSkills?: string[]; expected: string; actual: string | null; action: string; result: string}
 export interface SetupReport {schemaVersion: number; dryRun: boolean; steps: SetupStep[]; toolchain: string; issues: Issue[]; nextSteps: string[]}
 export interface BmadConfig {
   core?: Record<string, unknown>;

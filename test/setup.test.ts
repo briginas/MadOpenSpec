@@ -6,6 +6,7 @@ import {mkdtemp, realpath, rm, mkdir, writeFile, readFile, readdir, stat, symlin
 import os from 'node:os';
 import path from 'node:path';
 import {snapshot} from './helpers/project.ts';
+import {planningSkillIds} from '../src/bmad-profile.ts';
 import {withProjectLock} from '../src/state.ts';
 const api = await import('../src/setup.ts');
 async function fixture(t: TestContext) {
@@ -20,10 +21,20 @@ async function put(root: string, file: string, content='fixture\n') {
 export async function bmadFixture(root: string, settings: Partial<SetupSettings>={}) {
   await put(root,'_bmad/_config/manifest.yaml','installation:\n  version: 6.12.4\nmodules:\n  - name: core\n    version: 6.12.4\n  - name: bmm\n    version: 6.12.4\nides: [codex]\n');
   for (const f of ['core/module-help.csv','bmm/module-help.csv','scripts/resolve_config.py','scripts/config_utils.py','scripts/render_skill.py','scripts/resolve_customization.py']) await put(root,`_bmad/${f}`);
-  await put(root,'_bmad/_config/skill-manifest.csv','canonicalId,name,description,module,path\nbmad-help,bmad-help,Help,core,_bmad/core/bmad-help/SKILL.md\n');
-  await put(root,'_bmad/_config/files-manifest.csv','type,name,module,path,hash\nmd,help,core,core/bmad-help/SKILL.md,unused\n');
+  const ids = settings.bmadProfile === 'planning' ? [...planningSkillIds, 'bmad-build'] : ['bmad-help'];
+  const skillRows = [], fileRows = [];
+  for (const id of ids) {
+    const skill = `core/${id}/SKILL.md`;
+    skillRows.push(`${id},${id},Help,core,_bmad/${skill}`);
+    fileRows.push(`md,help,core,${skill},unused`);
+    await put(root,`.agents/skills/${id}/SKILL.md`);
+  }
+  await put(root,'_bmad/_config/skill-manifest.csv',['canonicalId,name,description,module,path', ...skillRows, ''].join('\n'));
+  await put(root,'_bmad/_config/files-manifest.csv',['type,name,module,path,hash', ...fileRows, ''].join('\n'));
+  for (const file of ['core/module-help.csv', 'bmm/module-help.csv', '_config/bmad-help.csv']) {
+    await put(root, `_bmad/${file}`, ['module,skill', 'core,_meta', ...ids.map(id => `core,${id}`), ''].join('\n'));
+  }
   await put(root,'_bmad/core/bmad-help/SKILL.md');
-  await put(root,'.agents/skills/bmad-help/SKILL.md');
   await put(root,'_bmad/config.toml',`[core]\nuser_name = ${JSON.stringify(settings.userName??'Developer')}\ncommunication_language = ${JSON.stringify(settings.communicationLanguage??'Russian')}\ndocument_output_language = ${JSON.stringify(settings.documentOutputLanguage??'Russian')}\noutput_folder = "_bmad-output"\n`);
 }
 async function openFixture(root: string) {
@@ -61,6 +72,33 @@ test('setup adds guide to an existing installation without changing other skills
 test('setup skips existing BMAD and preserves custom settings',async t=>{
   const root=await fixture(t);await bmadFixture(root,{userName:'Alice'});const i=installers();const r=await setup(root,{}, {installers:i});assert.equal(r.toolchain,'ready');assert.deepEqual(i.calls,['openspec']);
   const before=await snapshot(root);const conflict=await setup(root,{userName:'Bob'}, {installers:i});assert.equal(conflict.toolchain,'blocked');assert.deepEqual(await snapshot(root),before);
+});
+test('planning setup preserves existing project output and checks the saved profile on repeat', async t => {
+  const root = await fixture(t), i = installers();
+  await put(root, '_bmad-output/planning-artifacts/prd.md', 'original PRD');
+  await put(root, '.agents/skills/local-tool/SKILL.md', 'local skill');
+  const result = await setup(root, {}, {installers:i});
+  assert.equal(result.toolchain, 'ready');
+  assert.equal(result.steps[0].profile, 'planning');
+  assert.equal(await readFile(path.join(root, '_bmad-output/planning-artifacts/prd.md'), 'utf8'), 'original PRD');
+  assert.equal(await readFile(path.join(root, '.agents/skills/local-tool/SKILL.md'), 'utf8'), 'local skill');
+  const before = await snapshot(root);
+  assert.equal((await setup(root, {bmadProfile:'full'}, {installers:i})).toolchain, 'blocked');
+  assert.deepEqual(await snapshot(root), before);
+  const manifest = path.join(root, '_bmad/_config/skill-manifest.csv');
+  await writeFile(manifest, (await readFile(manifest, 'utf8')).split('\n').filter(line => !line.includes('bmad-review')).join('\n'));
+  assert.equal((await setup(root, {}, {installers:i})).toolchain, 'blocked');
+  assert.deepEqual(i.calls, ['bmad', 'openspec']);
+});
+test('incomplete legacy installation rejects migration during preflight', async t => {
+  const root = await fixture(t), i = installers();
+  await bmadFixture(root);
+  const before = await snapshot(root);
+  const result = await setup(root, {bmadProfile:'planning'}, {installers:i});
+  assert.equal(result.toolchain, 'blocked');
+  assert.deepEqual(i.calls, []);
+  assert.deepEqual(await snapshot(root), before);
+  assert.equal((await setup(root, {dryRun:true}, {installers:i})).steps[0].profile, 'full');
 });
 test('setup preflight rejects partial or incompatible BMAD before installing anything',async t=>{
   for(const content of ['installation:\n  version: 7.0.0\n','installation:\n  version: 6.12.4\n']) {
@@ -104,7 +142,7 @@ test('setup reads user and custom overrides without requiring Python',async t=>{
   const before=await snapshot(root);await put(root,'_bmad/custom/config.toml','invalid TOML');const failed=await setup(root,{}, {installers:i});assert.equal(failed.toolchain,'blocked');assert.equal(await readFile(path.join(root,'_bmad/config.user.toml'),'utf8'),before['_bmad/config.user.toml']);
 });
 test('setup records unknown partial installer output as requiring manual recovery',async t=>{
-  const root=await fixture(t),i=installers();i.bmad=async()=>{await put(root,'_bmad/partial','unknown');throw new Error('interrupted');};assert.equal((await setup(root,{}, {installers:i})).toolchain,'failed');
+  const root=await fixture(t),i=installers();i.bmad=async()=>{await put(root,'_bmad/partial','unknown');throw new Error('interrupted');};assert.equal((await setup(root,{bmadProfile:'full'}, {installers:i})).toolchain,'failed');
   const retry=installers();const result=await setup(root,{}, {installers:retry});assert.equal(result.toolchain,'blocked');assert.equal(result.issues[0].code,'SETUP_RECOVERY_REQUIRED');assert.deepEqual(retry.calls,[]);
 });
 test('setup never overwrites orphan BMAD or OpenSpec skills during fresh install',async t=>{

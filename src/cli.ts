@@ -21,7 +21,7 @@ import {updateProject} from './update.ts';
 const help = `mad-openspec ${version}
 
 Команды (из корня целевого проекта):
-  setup [--dry-run] [--json] [--openspec-root <path>]
+  setup [--dry-run] [--json] [--bmad-profile <planning|full>] [--openspec-root <path>]
         [--user-name <name>] [--communication-language <language>] [--document-output-language <language>]
   update [--dry-run] [--json]
   connect [--epics <path>] [--sprint-status <path>] [--bmad-manifest <path>] [--openspec-root <path>] [--json]
@@ -87,9 +87,11 @@ export async function runCli(argv: string[], {cwd = process.cwd(), stdout = writ
       return 0;
     }
     if (argv[0] === 'setup') {
-      const v = options(argv.slice(1), {'dry-run': {type:'boolean'}, json: {type:'boolean'}, ...stringOptions(['openspec-root','user-name','communication-language','document-output-language'])});
+      const v = options(argv.slice(1), {'dry-run': {type:'boolean'}, json: {type:'boolean'}, ...stringOptions(['bmad-profile','openspec-root','user-name','communication-language','document-output-language'])});
       for (const [key,value] of Object.entries(v)) if (typeof value === 'string' && !value.trim()) invalid(`Пустая опция --${key}`);
-      const report = await setupProject(root, {dryRun:v['dry-run'], openspecRoot:v['openspec-root'], userName:v['user-name'], communicationLanguage:v['communication-language'], documentOutputLanguage:v['document-output-language']}, {log:stderr});
+      const profile = v['bmad-profile'];
+      if (profile !== undefined && profile !== 'planning' && profile !== 'full') invalid('--bmad-profile принимает planning или full');
+      const report = await setupProject(root, {bmadProfile:profile, dryRun:v['dry-run'], openspecRoot:v['openspec-root'], userName:v['user-name'], communicationLanguage:v['communication-language'], documentOutputLanguage:v['document-output-language']}, {log:stderr});
       stdout(jsonSetup ? `${JSON.stringify(report,null,2)}\n` : formatSetup(report));
       return report.issues.length ? 1 : 0;
     }
