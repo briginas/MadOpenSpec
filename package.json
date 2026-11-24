@@ -1,6 +1,6 @@
 {
   "name": "mad-openspec",
-  "version": "0.3.10",
+  "version": "0.4.0",
   "description": "Prepare and close BMAD stories through OpenSpec",
   "type": "module",
   "repository": {
@@ -14,7 +14,7 @@
     "mad-openspec": "dist/bin/mad-openspec.js"
   },
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=22.20.0"
   },
   "files": [
     "CHANGELOG.md",
@@ -32,7 +32,7 @@
     "test:smoke": "node --test test/smoke.test.ts"
   },
   "dependencies": {
-    "@fission-ai/openspec": "1.16.0",
+    "@fission-ai/openspec": "2.1.1",
     "ajv": "8.20.0",
     "bmad-method": "6.12.4",
     "smol-toml": "1.9.1",

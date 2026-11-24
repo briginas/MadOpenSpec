@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, realpath, rm, mkdir, writeFile, readFile, readdir, stat, symlink} from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {openSkills, openSkillContent} from '../src/openspec-skills.ts';
 import {snapshot} from './helpers/project.ts';
 import {planningSkillIds} from '../src/bmad-profile.ts';
 import {withProjectLock} from '../src/state.ts';
@@ -39,7 +40,8 @@ export async function bmadFixture(root: string, settings: Partial<SetupSettings>
 }
 async function openFixture(root: string) {
   await put(root,'openspec/config.yaml','schema: spec-driven\n');
-  for (const name of ['explore','propose','apply-change','update-change','sync-specs','archive-change']) await put(root,`.agents/skills/openspec-${name}/SKILL.md`);
+  await put(root,'.agents/skills/.openspec-target','codex\n');
+  for (const name of openSkills) await put(root,`.agents/skills/${name}/SKILL.md`, await openSkillContent(name));
 }
 function installers({failOpen=false,emptyBmad=false}={}): Installers & {calls: string[]} {
   const calls: string[]=[];
@@ -134,7 +136,7 @@ test('setup preflight detects nested external skill symlinks before fresh instal
   const root=await fixture(t),outside=await fixture(t);await mkdir(path.join(root,'.agents/skills'),{recursive:true});await symlink(outside,path.join(root,'.agents/skills/bmad-help'));const i=installers();const r=await setup(root,{}, {installers:i});assert.equal(r.toolchain,'blocked');assert.deepEqual(i.calls,[]);
 });
 test('setup configures missing OpenSpec skills while preserving existing files',async t=>{
-  const root=await fixture(t);await openFixture(root);await rm(path.join(root,'.agents/skills/openspec-explore'),{recursive:true});await put(root,'openspec/config.yaml','schema: spec-driven\ncontext: preserve-me\n');const i=installers();const r=await setup(root,{}, {installers:i});assert.equal(r.toolchain,'ready');assert.match(await readFile(path.join(root,'openspec/config.yaml'),'utf8'),/preserve-me/);assert.equal(await readFile(path.join(root,'.agents/skills/openspec-propose/SKILL.md'),'utf8'),'fixture\n');
+  const root=await fixture(t);await openFixture(root);await rm(path.join(root,'.agents/skills/openspec-explore'),{recursive:true});await put(root,'openspec/config.yaml','schema: spec-driven\ncontext: preserve-me\n');const i=installers();const r=await setup(root,{}, {installers:i});assert.equal(r.toolchain,'ready');assert.match(await readFile(path.join(root,'openspec/config.yaml'),'utf8'),/preserve-me/);assert.equal(await readFile(path.join(root,'.agents/skills/openspec-propose/SKILL.md'),'utf8'),await openSkillContent('openspec-propose'));
 });
 test('setup reads user and custom overrides without requiring Python',async t=>{
   const root=await fixture(t);await bmadFixture(root);await put(root,'_bmad/config.user.toml','[core]\nuser_name = "Personal"\n');await put(root,'_bmad/custom/config.toml','[core]\nuser_name = "Team"\n');await put(root,'_bmad/custom/config.user.toml','[core]\nuser_name = "Final"\n');

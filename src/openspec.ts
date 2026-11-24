@@ -46,7 +46,7 @@ export function makeOpenSpec({cwd, binPath = openSpecBin(), runProcess: run = ru
       const value = await invoke<OpenSpecSchema[]>(['schemas', '--json'], true, false);
       if (!Array.isArray(value)) invalid('Неверный список schemas OpenSpec');
       const matches = value.filter(schema => schema.name === 'spec-driven');
-      if (matches.length !== 1 || matches[0].source !== 'package' || !Array.isArray(matches[0].artifacts) || matches[0].artifacts.length !== 4 || !['proposal', 'specs', 'design', 'tasks'].every(id => matches[0].artifacts.includes(id))) throw new CliError('UNSUPPORTED_SCHEMA', 'Требуется встроенная spec-driven schema OpenSpec 1.16.0 без project/user overrides');
+      if (matches.length !== 1 || matches[0].source !== 'package' || !Array.isArray(matches[0].artifacts) || matches[0].artifacts.length !== 4 || !['proposal', 'specs', 'design', 'tasks'].every(id => matches[0].artifacts.includes(id))) throw new CliError('UNSUPPORTED_SCHEMA', 'Требуется встроенная spec-driven schema OpenSpec без project/user overrides');
       return matches[0];
     },
     context: async () => {

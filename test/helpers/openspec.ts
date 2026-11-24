@@ -10,7 +10,7 @@ export function fakeOpenSpec(root: string, overrides: Overrides = {}): OpenSpec 
   const dir = (id: string) => path.join(root, 'openspec/changes', id);
 
   const methods: OpenSpec = {
-    version: async () => '1.16.0',
+    version: async () => '2.1.1',
     schema: async () => ({name: 'spec-driven', source: 'package', artifacts: ['proposal', 'specs', 'design', 'tasks']}),
     context: async () => ({root: {path: root, source: 'nearest', role: 'openspec_root'}, members: [], status: []}),
     create: async id => {

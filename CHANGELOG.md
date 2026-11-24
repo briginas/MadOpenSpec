@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Upgrade to OpenSpec 2.1.1 and Node.js 22.20.0 or later. Run `mad-openspec update` to migrate project skills and existing connections.
+
 ## [0.3.10] · 2026-11-20
 
 - Setup and update connect BMAD requirements, sprint change proposals and story planning to accepted capability specifications, including changes made directly through OpenSpec.

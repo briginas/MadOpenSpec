@@ -1,9 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {mkdir, readFile, rm, stat, writeFile} from 'node:fs/promises';
+import {mkdir, readFile, rm, stat, writeFile, rename} from 'node:fs/promises';
 import {configuredFixture, snapshot} from './helpers/project.ts';
 import {runCli} from '../src/cli.ts';
+import {openSkillContent, openSkills} from '../src/openspec-skills.ts';
 import {cliVersion} from '../src/version.ts';
 
 async function invoke(root: string, ...args: string[]) {
@@ -131,4 +132,45 @@ test('invalid team or personal customization blocks update before any writes', a
     assert.deepEqual(await snapshot(root), before);
     await rm(file);
   }
+});
+
+test('upgrade a setup-only nested OpenSpec root and preserve local edits on conflict', async t => {
+  const {root} = await configuredFixture(t);
+  await rm(path.join(root, '.mad-openspec/config.json'));
+  const nested = path.join(root, 'planning', 'spec-project');
+  await mkdir(nested);
+  await rename(path.join(root, 'openspec'), path.join(nested, 'openspec'));
+  const receipt = path.join(root, '.mad-openspec/setup-state.json');
+  const steps = [
+    {id: 'mad-openspec-skills', actual: '0.3.10', expected: '0.3.10', result: 'skipped'},
+    {id: 'openspec', actual: '1.16.0', expected: '1.16.0', result: 'completed'}
+  ];
+  await writeFile(receipt, JSON.stringify({schemaVersion: 1, settings: {openspecRoot: 'planning/spec-project'}, steps}));
+  const skills = path.join(nested, '.agents/skills');
+  const edited = path.join(skills, 'openspec-propose/SKILL.md');
+  await mkdir(path.dirname(edited), {recursive: true});
+  await writeFile(edited, 'my custom skill');
+  await writeFile(path.join(skills, '.openspec-target'), 'kiro own-files\n');
+  const before = await snapshot(root);
+  for (const args of [['--dry-run'], []]) {
+    const blocked = await invoke(root, 'update', ...args, '--json');
+    assert.equal(JSON.parse(blocked.stdout).issues[0].code, 'UPDATE_CONFLICT');
+    assert.deepEqual(await snapshot(root), before);
+  }
+
+  // A retry may encounter files that already have target contents.
+  await writeFile(edited, await openSkillContent('openspec-propose'));
+  const preview = await invoke(root, 'update', '--dry-run', '--json');
+  const updated = await invoke(root, 'update', '--json');
+  assert.equal(updated.code, 0, updated.stdout);
+  assert.deepEqual(JSON.parse(updated.stdout).files, JSON.parse(preview.stdout).files);
+  for (const name of openSkills) {
+    assert.equal(await readFile(path.join(skills, name, 'SKILL.md'), 'utf8'), await openSkillContent(name));
+  }
+  assert.equal(await readFile(path.join(skills, '.openspec-target'), 'utf8'), 'kiro own-files\ncodex\n');
+  assert.equal(JSON.parse(await readFile(receipt, 'utf8')).steps[1].actual, '2.1.1');
+  assert.deepEqual(JSON.parse((await invoke(root, 'update', '--json')).stdout).files, []);
+  const files = await snapshot(root);
+  assert.equal('.mad-openspec/config.json' in files, false);
+  assert.equal(Object.keys(files).some(file => file.startsWith('.agents/skills/openspec-')), false);
 });

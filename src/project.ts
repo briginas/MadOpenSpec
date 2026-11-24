@@ -5,7 +5,7 @@ import {realpath, readFile, lstat} from 'node:fs/promises';
 import {CliError} from './errors.ts';
 import {parseDocument} from 'yaml';
 import {atomicWrite, withProjectLock, canonicalHash} from './state.ts';
-import {checkSetupVersion, checkVersion, cliVersion} from './version.ts';
+import {checkSetupVersion, checkVersion, cliVersion, openSpecVersion, legacyOpenSpecVersion} from './version.ts';
 import {readBacklog, readSprint} from './bmad.ts';
 
 export function isWithin(root: string, target: string) {
@@ -45,7 +45,7 @@ export async function readProjectConfig(root: string): Promise<ProjectConfig> {
   try {value = JSON.parse(await readFile(file, 'utf8'));}
   catch (caught) {const error = asError(caught);throw new CliError(error.code === 'ENOENT' ? 'PROJECT_NOT_INITIALIZED' : 'INVALID_CONFIG', `Не удалось прочитать конфигурацию: ${file}`, {path: file});}
   const strings = [value?.bmad?.manifest, value?.bmad?.epics, value?.bmad?.sprintStatus, value?.openspec?.root];
-  if (![1, 2].includes(value?.schemaVersion) || (value?.madOpenSpecVersion !== undefined && (typeof value.madOpenSpecVersion !== 'string' || !value.madOpenSpecVersion.trim())) || strings.some(x => typeof x !== 'string' || !x) || value.bmad.version !== '6.12.4' || value.openspec.version !== '1.16.0' || value.openspec.schema !== 'spec-driven') {
+  if (![1, 2].includes(value?.schemaVersion) || (value?.madOpenSpecVersion !== undefined && (typeof value.madOpenSpecVersion !== 'string' || !value.madOpenSpecVersion.trim())) || strings.some(x => typeof x !== 'string' || !x) || value.bmad.version !== '6.12.4' || ![openSpecVersion, legacyOpenSpecVersion].includes(value.openspec.version) || value.openspec.schema !== 'spec-driven') {
     throw new CliError('INVALID_CONFIG', 'Неверная конфигурация MadOpenSpec', {path: file});
   }
   for (const rel of strings) {
@@ -59,6 +59,7 @@ export async function loadConfig(root: string): Promise<ProjectConfig> {
   root = await realpath(root);
   const value = await readProjectConfig(root);
   checkVersion(value.madOpenSpecVersion ?? null);
+  if (value.openspec.version !== openSpecVersion) throw new CliError('VERSION_MISMATCH', 'Выполните mad-openspec update для обновления OpenSpec.');
   await checkSetupVersion(root);
   value.openspec.root = path.relative(root, await realpath(path.resolve(root, value.openspec.root))) || '.';
   return value;
@@ -70,7 +71,7 @@ async function checkProject(project: Project, openspec: OpenSpec) {
   const manifestDoc = parseDocument(await readFile(path.resolve(root, config.bmad.manifest), 'utf8'));
   if (manifestDoc.errors.length) throw new CliError('INVALID_BMAD_MANIFEST', 'Неверный YAML manifest BMAD');
   if (manifestDoc.getIn(['installation', 'version']) !== '6.12.4') throw new CliError('UNSUPPORTED_VERSION', 'Требуется BMAD v6.12.4');
-  if (await openspec.version() !== '1.16.0') throw new CliError('UNSUPPORTED_VERSION', 'Требуется OpenSpec 1.16.0');
+  if (await openspec.version() !== openSpecVersion) throw new CliError('UNSUPPORTED_VERSION', `Требуется OpenSpec ${openSpecVersion}`);
   const expected = await realpath(path.resolve(root, config.openspec.root));
   const context = await openspec.context();
   if (context?.root?.source !== 'nearest' || !context.root.path || await realpath(context.root.path) !== expected) throw new CliError('UNSUPPORTED_OPENSPEC_ROOT', 'Внешние stores и перенаправленные OpenSpec roots не поддерживаются');
@@ -91,7 +92,7 @@ export async function initProject(root: string, options: ProjectPaths, openspec:
     if (key === 'openspecRoot') return path.relative(await realpath(root), await realpath(file)) || '.';
     return path.relative(root, file) || '.';
   };
-  const config = {schemaVersion: 2, madOpenSpecVersion: cliVersion, bmad: {version: '6.12.4', manifest: await relative('manifest'), epics: await relative('epics'), sprintStatus: await relative('sprintStatus')}, openspec: {version: '1.16.0', root: await relative('openspecRoot'), schema: 'spec-driven'}};
+  const config = {schemaVersion: 2, madOpenSpecVersion: cliVersion, bmad: {version: '6.12.4', manifest: await relative('manifest'), epics: await relative('epics'), sprintStatus: await relative('sprintStatus')}, openspec: {version: openSpecVersion, root: await relative('openspecRoot'), schema: 'spec-driven'}};
   root = await realpath(root);
   return withProjectLock(root, async () => {
     await checkSetupVersion(root);

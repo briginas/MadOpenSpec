@@ -35,7 +35,7 @@ const help = `mad-openspec ${version}
   --help
   --version
 
-BMAD v6.12.4; OpenSpec 1.16.0; локальная spec-driven schema.
+BMAD v6.12.4; OpenSpec 2.1.1; локальная spec-driven schema.
 Setup устанавливает инструменты. Connect подключает готовый backlog.
 Status показывает сводку и открытые истории. --summary добавляет список по эпикам, --json выводит полный отчёт.
 Для автопоиска по BMAD config требуется Python 3.11+; явные пути работают без Python.

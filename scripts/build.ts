@@ -1,4 +1,5 @@
 import {cp, mkdir, rm, chmod} from 'node:fs/promises';
+import {openSkills} from '../src/openspec-skills.ts';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
@@ -14,5 +15,9 @@ for (const asset of ['package.json', 'schemas', 'skills', 'assets']) {
     recursive: true,
     filter: source => !source.endsWith('/.DS_Store')
   });
+}
+for (const name of openSkills) {
+  const file = `.agents/skills/${name}/SKILL.md`;
+  await cp(new URL(`../${file}`, import.meta.url), new URL(file, dist));
 }
 await chmod(new URL('bin/mad-openspec.js', dist), 0o755);

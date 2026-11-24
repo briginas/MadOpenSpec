@@ -1,4 +1,5 @@
 schema: spec-driven
+skillsScope: project
 
 context: |
   Language: en

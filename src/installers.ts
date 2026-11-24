@@ -21,13 +21,13 @@ export function makeInstallers({run=execute,log=()=>{}}: {run?: ProcessRunner; l
   }
   return {
     async prerequisite(){
-      if(Number(process.versions.node.split('.')[0])<22 || Number(process.versions.node.split('.')[0])===22 && Number(process.versions.node.split('.')[1])<18) throw new CliError('MISSING_PREREQUISITE','Требуется Node.js >=22.18');
+      if(Number(process.versions.node.split('.')[0])<22 || Number(process.versions.node.split('.')[0])===22 && Number(process.versions.node.split('.')[1])<20) throw new CliError('MISSING_PREREQUISITE','Требуется Node.js >=22.20');
       const pkg=JSON.parse(await readFile(path.join(path.dirname(bmadBin()),'../../package.json'),'utf8'));
       if(pkg.version!=='6.12.4') throw new CliError('UNSUPPORTED_VERSION','Требуется поставляемый bmad-method 6.12.4');
       const npm=await run(process.platform==='win32'?'npm.cmd':'npm',['--version'],{cwd:process.cwd(),env:process.env});
       if(npm.code!==0) throw new CliError('MISSING_PREREQUISITE','Требуется npm');
     },
     bmad:async(root,s)=>invoke(process.execPath,[bmadBin(),'install','--directory',root,'--modules','bmm','--tools','codex','--user-name',s.userName,'--communication-language',s.communicationLanguage,'--document-output-language',s.documentOutputLanguage,'--output-folder','_bmad-output','--no-shims','--yes'],root),
-    openspec:async root=>{await mkdir(root,{recursive:true});await invoke(process.execPath,[openSpecBin(),'init',root,'--tools','codex','--profile','core','--language','en','--no-animation'],root);}
+    openspec:async root=>{await mkdir(root,{recursive:true});await invoke(process.execPath,[openSpecBin(),'init',root,'--tools','codex','--scope','project','--profile','core','--language','en','--no-animation'],root);}
   };
 }

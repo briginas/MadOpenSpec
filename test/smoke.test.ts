@@ -87,6 +87,33 @@ test('connect-create-refine-close-status', async t => {
   assert.equal(report.summary.counts.done, 1);
   assert.deepEqual(report.issues, []);
 });
+test('upgrade preserves a linked story through status, archive and BMAD completion', async t => {
+  const f = await prepared(t);
+  const configFile = path.join(f.root, '.mad-openspec/config.json');
+  const config = JSON.parse(await readFile(configFile, 'utf8'));
+  config.madOpenSpecVersion = '0.3.10';
+  config.openspec.version = '1.16.0';
+  await writeFile(configFile, JSON.stringify(config));
+
+  const before = await snapshot(f.root);
+  const preview = JSON.parse((await success(f.root, cli, ['update', '--dry-run', '--json'])).stdout);
+  assert.deepEqual(await snapshot(f.root), before);
+  const updated = JSON.parse((await success(f.root, cli, ['update', '--json'])).stdout);
+  assert.deepEqual(updated.files, preview.files);
+  const after = await snapshot(f.root);
+  for (const [file, text] of Object.entries(before)) {
+    if (file !== '.mad-openspec/config.json') assert.equal(after[file], text, file);
+  }
+  assert.deepEqual(JSON.parse((await success(f.root, cli, ['update', '--json'])).stdout).files, []);
+  const status = JSON.parse((await success(f.root, cli, ['status', '--json'])).stdout);
+  assert.equal(status.stories.find((s: {storyId: string}) => s.storyId === '1.2').changeId, 'story-1-2');
+  await finishTasks(f);
+  await success(f.root, cli, ['change', 'close', 'story-1-2']);
+  const closed = JSON.parse((await success(f.root, cli, ['status', '--json'])).stdout);
+  assert.equal(closed.stories.find((s: {storyId: string}) => s.storyId === '1.2').workflowState, 'done');
+  assert.deepEqual(closed.issues, []);
+});
+
 test('repeat-create-after-agent-refinement', async t => {
   const f = await prepared(t);
   await writeFile(path.join(f.changeDir, 'tasks.md'), '# Tasks\n\n- [ ] 1.1 Уточнённая агентом задача\n');

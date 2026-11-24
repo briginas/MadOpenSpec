@@ -13,13 +13,14 @@ import {parse as parseToml} from 'smol-toml';
 import {assertWritablePath, readProjectConfig} from './project.ts';
 import {atomicWrite, withProjectLock} from './state.ts';
 import {CliError, problem} from './errors.ts';
-import {cliVersion, checkVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
+import {cliVersion, openSpecVersion, checkVersion, installedSkills, readSetupState, setupStatePath} from './version.ts';
 import {makeInstallers} from './installers.ts';
 import {matchesPlanningProfile, planningSkillIds, preparePlanningCatalogs, readBmadCatalog} from './bmad-profile.ts';
 import {migrateBmad, migrationBackup, planBmadMigration} from './bmad-migration.ts';
 import {planPlanningRule} from './planning-rule.ts';
+import {openSkills, openSkillContent, codexTargetUpdate, targetMarker} from './openspec-skills.ts';
 
-export const openSkills=['explore','propose','apply-change','update-change','sync-specs','archive-change'].map(x=>`openspec-${x}`);
+export {openSkills};
 export const madSkills=['mad-openspec-guide','mad-openspec-prepare','mad-openspec-apply','mad-openspec-close'];
 export const sources=fileURLToPath(new URL('../skills/',import.meta.url));
 export async function exists(file: string){try{await lstat(file);return true;}catch (caught) {const e = asError(caught);if(e.code==='ENOENT')return false;throw e;}}
@@ -120,6 +121,7 @@ async function probeOpen(root: string,openRoot: string): Promise<Probe>{
   let action='install';
   if(await exists(dir)){
     const config=await yaml(await assertWritablePath(root,path.join(dir,'config.yaml')));
+    if(config?.skillsScope==='global')conflict('Для MadOpenSpec требуются skills уровня проекта.');
     if(config?.store!==undefined||(config?.schema??'spec-driven')!=='spec-driven')conflict('Требуется локальная spec-driven schema без store');
     action='skip';
   }
@@ -130,9 +132,16 @@ async function probeOpen(root: string,openRoot: string): Promise<Probe>{
       if(action==='install')conflict('Skills OpenSpec существуют без OpenSpec-root; требуется ручная проверка');
       if(!await exists(path.join(dir,'SKILL.md')))conflict(`Неполный skill OpenSpec: ${name}`);
       await tree(root,dir);
+      if(await readFile(path.join(dir,'SKILL.md'),'utf8') !== await openSkillContent(name)) {
+        conflict(`Версия или содержимое ${dir}/SKILL.md отличается от OpenSpec ${openSpecVersion}. Для управляемого проекта выполните mad-openspec update.`);
+      }
     }else if(action==='skip')action='configure';
   }
-  return {action,actual:action==='install'?null:'1.16.0'};
+  if (await exists(openRoot)) {
+    const marker = await codexTargetUpdate(openRoot);
+    if (action === 'skip' && marker !== null) action = 'configure';
+  }
+  return {action,actual:action==='install'?null:openSpecVersion};
 }
 async function probeMad(root: string): Promise<Probe>{
   for(const name of madSkills){const dir=await assertWritablePath(root,`.agents/skills/${name}`);if(await exists(dir)&&JSON.stringify(await tree(root,dir))!==JSON.stringify(await tree(sources,path.join(sources,name))))conflict(`Skill отличается от поставляемого: ${name}`);}
@@ -172,7 +181,7 @@ async function plan(root: string,options: SetupOptions){
   let migration: Probe['migration'];
   const steps: SetupStep[]=[],issues: Issue[]=[];
   for(let i=0;i<checks.length;i++){
-    const id=['bmad','openspec','mad-openspec-skills'][i],expected=['6.12.4','1.16.0',cliVersion][i];
+    const id=['bmad','openspec','mad-openspec-skills'][i],expected=['6.12.4',openSpecVersion,cliVersion][i];
     try {
       const probe = await checks[i]();
       if (probe.migration) migration = probe.migration;
@@ -232,6 +241,8 @@ export async function setupProject(root: string,options: SetupOptions={},deps: {
               if((await probeOpen(stage,stage)).action!=='skip')throw new CliError('SETUP_POSTCONDITION_FAILED','Installer не подготовил OpenSpec во временном каталоге');
               if(step.action==='install')await publishDirectory(root,path.join(p.openRoot,'openspec'),path.join(stage,'openspec'));
               for(const name of openSkills){const dest=path.join(p.openRoot,'.agents/skills',name);if(!await exists(dest))await publishDirectory(root,dest,path.join(stage,'.agents/skills',name));}
+              const marker = await codexTargetUpdate(p.openRoot);
+              if (marker !== null) await atomicWrite(root,path.join(p.openRoot,targetMarker),marker);
             }finally{await rm(stage,{recursive:true,force:true});}
           }else {
             const ruleWrites = await planPlanningRule(root, 'SETUP_CONFLICT');

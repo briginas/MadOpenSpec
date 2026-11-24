@@ -6,6 +6,9 @@ import type {SetupSettings, SetupStep} from './types.ts';
 export const cliVersion: string = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8')).version;
 export const setupStatePath = '.mad-openspec/setup-state.json';
 
+export const openSpecVersion = '2.1.1';
+export const legacyOpenSpecVersion = '1.16.0';
+
 interface SetupState {
   schemaVersion: number;
   settings: SetupSettings;
@@ -40,7 +43,7 @@ export function checkVersion(projectVersion: string | null) {
 
 // Add a source release here when its project files have an upgrade path.
 export function canUpdate(version: string) {
-  return ['0.3.3', '0.3.4', '0.3.5', '0.3.6', '0.3.7', '0.3.8', '0.3.9', cliVersion].includes(version);
+  return ['0.3.3', '0.3.4', '0.3.5', '0.3.6', '0.3.7', '0.3.8', '0.3.9', '0.3.10', cliVersion].includes(version);
 }
 
 export async function checkSetupVersion(root: string) {

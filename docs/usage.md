@@ -6,7 +6,7 @@ Run shell commands from the **target project root**. Send skills beginning with 
 
 ## Installation and setup
 
-`mad-openspec setup` installs BMAD 6.12.4 with BMM, OpenSpec 1.16.0 with the built-in `spec-driven` schema, and the Codex skills. It uses the installers pinned in the CLI checkout. Run `mad-openspec setup --dry-run` to inspect the plan before writing files.
+`mad-openspec setup` installs BMAD 6.12.4 with BMM, OpenSpec 2.1.1 with the built-in `spec-driven` schema, and the Codex skills. It uses the installers pinned in the CLI checkout. Run `mad-openspec setup --dry-run` to inspect the plan before writing files.
 
 | To configure | Option | Default for a new project |
 | --- | --- | --- |
@@ -188,7 +188,9 @@ mad-openspec update
 mad-openspec status
 ```
 
-Update refreshes the four managed skills, their shared BMAD planning integration, the setup receipt if present, and the version pin in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.9. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed file was edited locally, save your edits and restore its released contents before retrying.
+Use Node.js 22.20.0 or later for the upgrade from OpenSpec 1.16.0. After updating a connected project, run `mad-openspec status` to continue its active stories.
+
+Update refreshes the managed skills and BMAD planning guidance, records the tool versions in the setup receipt when present, and updates the pins in a connected project. It works before backlog connection and can adopt an unversioned connection or migrate versions 0.3.3 through 0.3.10. For other versions, use the CLI identified by the diagnostic. Add `--json` to see affected files. If a managed file was edited locally, save your edits and restore its released contents before retrying.
 
 ## Installing Codex skills
 

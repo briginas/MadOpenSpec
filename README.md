@@ -24,7 +24,7 @@ MadOpenSpec   Mark the linked story done in BMAD
 
 ## Set up the tools
 
-The CLI requires Node.js 22.18.0 or later and npm. BMAD workflows use `uv`. Automatic backlog discovery also needs Python 3.11 or later. Setup installs the supported versions of BMAD (6.12.4) and OpenSpec (1.16.0) and places project skills under `.agents/skills/`.
+The CLI requires Node.js 22.20.0 or later and npm. BMAD workflows use `uv`. Automatic backlog discovery also needs Python 3.11 or later. Setup installs the supported versions of BMAD (6.12.4) and OpenSpec (2.1.1) and places project skills under `.agents/skills/`.
 
 Install the CLI from npm, then run setup from your target project.
 
