@@ -1,8 +1,9 @@
 # Changelog
 
-## 0.4.0
+## [0.4.0] · 2026-11-26
 
 - Upgrade to OpenSpec 2.1.1 and Node.js 22.20.0 or later. Run `mad-openspec update` to migrate project skills and existing connections.
+- New installations use the BMAD planning profile by default. Use `--bmad-profile full` for all core and BMM skills, or preview an existing installation's migration with `mad-openspec setup --bmad-profile planning --dry-run`.
 
 ## [0.3.10] · 2026-11-20
 
@@ -21,6 +22,7 @@
 - First public npm release. Install the CLI with `npm install -g mad-openspec`.
 - Connect a BMAD backlog, prepare an OpenSpec change for a selected story, and mark the story done when the change is archived.
 
+[0.4.0]: https://github.com/briginas/MadOpenSpec/releases/tag/v0.4.0
 [0.3.10]: https://github.com/briginas/MadOpenSpec/releases/tag/v0.3.10
 [0.3.9]: https://github.com/briginas/MadOpenSpec/releases/tag/v0.3.9
 [0.3.8]: https://github.com/briginas/MadOpenSpec/releases/tag/v0.3.8
